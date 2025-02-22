@@ -236,7 +236,47 @@ export class QdrantDatabaseAdapter
     tableName: string,
     unique?: boolean
   ): Promise<void> {
-    return Promise.resolve(undefined);
+    elizaLogger.debug("QdrantAdapter createMemory:", {
+      memoryId: memory.id,
+      embeddingLength: memory.embedding?.length,
+      contentLength: memory.content?.text?.length
+    });
+
+    let isUnique = unique ?? true;
+    if (memory.embedding) {
+      const similarMemories = await this.searchMemoriesByEmbedding(
+        memory.embedding,
+        {
+          tableName,
+          roomId: memory.roomId,
+          match_threshold: 0.95,
+          count: 1
+        }
+      );
+      isUnique = similarMemories.length === 0;
+    }
+
+    await this.db.upsert(this.collectionName, {
+      wait: true,
+      points: [
+        {
+          id: this.buildQdrantID(memory.id || v4()),
+          vector: memory.embedding
+            ? Array.from(memory.embedding)
+            : new Array(this.vectorSize).fill(0),
+          payload: {
+            id: memory.id,
+            type: tableName,
+            content: memory.content,
+            userId: memory.userId,
+            roomId: memory.roomId,
+            agentId: memory.agentId,
+            unique: memory.unique ?? isUnique,
+            createdAt: Date.now()
+          }
+        }
+      ]
+    });
   }
 
   async createRelationship(params: {
@@ -285,11 +325,56 @@ export class QdrantDatabaseAdapter
     count?: number;
     unique?: boolean;
     tableName: string;
-    agentId: UUID;
+    agentId?: UUID;
     start?: number;
     end?: number;
   }): Promise<Memory[]> {
-    return Promise.resolve([]);
+    if (!params.tableName) throw new Error("tableName is required");
+    if (!params.roomId) throw new Error("roomId is required");
+
+    const filter: any = {
+      must: [
+        { key: "type", match: { value: params.tableName } },
+        { key: "roomId", match: { value: params.roomId } }
+      ]
+    };
+
+    if (params.unique) {
+      filter.must.push({
+        key: "unique",
+        match: { value: params.unique.toString() }
+      });
+    }
+
+    if (params.agentId) {
+      filter.must.push({ key: "agentId", match: { value: params.agentId } });
+    }
+
+    if (params.start || params.end) {
+      const range: any = { key: "createdAt" };
+      if (params.start) range.gte = params.start;
+      if (params.end) range.lte = params.end;
+      filter.must.push({ range });
+    }
+
+    const scrollResults = await this.db.scroll(this.collectionName, {
+      limit: params.count || 100,
+      filter,
+      with_payload: true,
+      with_vector: true
+    });
+
+    return (scrollResults.points || []).map((point) => ({
+      id: point.payload.id as UUID,
+      type: point.payload.type as string,
+      content: point.payload.content as { text: string },
+      embedding: point.vector ? Array.from(point.vector as number[]) : [],
+      userId: point.payload.userId as UUID,
+      roomId: point.payload.roomId as UUID,
+      agentId: point.payload.agentId as UUID,
+      unique: point.payload.unique as boolean,
+      createdAt: point.payload.createdAt as number
+    }));
   }
 
   async getMemoriesByRoomIds(params: {
@@ -384,7 +469,36 @@ export class QdrantDatabaseAdapter
     match_count: number;
     unique: boolean;
   }): Promise<Memory[]> {
-    return Promise.resolve([]);
+    const searchResults = await this.db.search(this.collectionName, {
+      vector: Array.from(params.embedding),
+      limit: params.match_count,
+      score_threshold: params.match_threshold,
+      filter: {
+        must: [
+          { key: "type", match: { value: params.tableName } },
+          { key: "roomId", match: { value: params.roomId } },
+          { key: "agentId", match: { value: params.agentId } },
+          ...(params.unique
+            ? [{ key: "unique", match: { value: params.unique.toString() } }]
+            : [])
+        ]
+      },
+      with_payload: true,
+      with_vector: true
+    });
+
+    return searchResults.map((result) => ({
+      id: result.payload.id as UUID,
+      type: result.payload.type as string,
+      content: result.payload.content as { text: string },
+      embedding: result.vector ? Array.from(result.vector as number[]) : [],
+      userId: result.payload.userId as UUID,
+      roomId: result.payload.roomId as UUID,
+      agentId: result.payload.agentId as UUID,
+      unique: result.payload.unique as boolean,
+      createdAt: result.payload.createdAt as number,
+      similarity: result.score
+    }));
   }
 
   async searchMemoriesByEmbedding(
@@ -398,7 +512,79 @@ export class QdrantDatabaseAdapter
       tableName: string;
     }
   ): Promise<Memory[]> {
-    return Promise.resolve([]);
+    elizaLogger.debug("Incoming vector:", {
+      length: embedding.length,
+      sample: embedding.slice(0, 5),
+      isArray: Array.isArray(embedding),
+      allNumbers: embedding.every((n) => typeof n === "number")
+    });
+
+    // Validate embedding dimension
+    if (embedding.length !== this.vectorSize) {
+      throw new Error(
+        `Invalid embedding dimension: expected ${this.vectorSize}, got ${embedding.length}`
+      );
+    }
+
+    // Clean and normalize the vector
+    const cleanVector = embedding.map((n) => {
+      if (!Number.isFinite(n)) return 0;
+      return Number(n.toFixed(6));
+    });
+
+    elizaLogger.debug("Vector debug:", {
+      originalLength: embedding.length,
+      cleanLength: cleanVector.length,
+      sample: cleanVector.slice(0, 5)
+    });
+
+    // Build filter conditions
+    const filter: any = {
+      must: [{ key: "type", match: { value: params.tableName } }]
+    };
+
+    if (params.unique) {
+      filter.must.push({
+        key: "unique",
+        match: { value: params.unique.toString() }
+      });
+    }
+
+    if (params.agentId) {
+      filter.must.push({ key: "agentId", match: { value: params.agentId } });
+    }
+
+    if (params.roomId) {
+      filter.must.push({ key: "roomId", match: { value: params.roomId } });
+    }
+
+    // Perform the search
+    const searchResults = await this.db.search(this.collectionName, {
+      vector: cleanVector,
+      limit: params.count || 10,
+      score_threshold: params.match_threshold || 0,
+      filter,
+      with_payload: true,
+      with_vector: true
+    });
+
+    elizaLogger.debug("Search results:", {
+      count: searchResults.length,
+      firstScore: searchResults[0]?.score
+    });
+
+    return searchResults.map((result) => ({
+      id: result.payload.id as UUID,
+      type: result.payload.type as string,
+      content: result.payload.content as { text: string },
+      embedding: result.vector ? Array.from(result.vector as number[]) : [],
+      userId: result.payload.userId as UUID,
+      roomId: result.payload.roomId as UUID,
+      agentId: result.payload.agentId as UUID,
+      unique: result.payload.unique as boolean,
+      createdAt: result.payload.createdAt as number,
+      similarity: result.score || 0
+    }));
   }
 
   async setParticipantUserState(
