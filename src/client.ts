@@ -14,15 +14,20 @@ import {
   type Goal,
   type Relationship,
   type IAgentRuntime,
-  type Adapter,
+  type IDatabaseAdapter,
   type Plugin
 } from "@elizaos/core";
+
+// Declare the Adapter type
+declare type Adapter = {
+  init: (runtime: IAgentRuntime) => IDatabaseAdapter & IDatabaseCacheAdapter;
+};
 
 export class QdrantDatabaseAdapter
   extends DatabaseAdapter<QdrantClient>
   implements IDatabaseCacheAdapter
 {
-  db: QdrantClient;
+  declare db: QdrantClient;
   collectionName: string = "collection";
   qdrantV5UUIDNamespace: string = "00000000-0000-0000-0000-000000000000";
   cacheM: Map<string, string> = new Map<string, string>();

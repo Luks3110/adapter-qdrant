@@ -6,7 +6,6 @@ import {
   DatabaseAdapter
 } from "@elizaos/core";
 var QdrantDatabaseAdapter = class extends DatabaseAdapter {
-  db;
   collectionName = "collection";
   qdrantV5UUIDNamespace = "00000000-0000-0000-0000-000000000000";
   cacheM = /* @__PURE__ */ new Map();
