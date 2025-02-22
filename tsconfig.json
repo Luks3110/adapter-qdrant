@@ -18,7 +18,9 @@
         "checkJs": false,
         "noEmitOnError": false,
         "moduleDetection": "force",
-        "allowArbitraryExtensions": true
+        "allowArbitraryExtensions": true,
+        "declarationMap": true,
+        "sourceMap": true
     },
     "include": ["src/**/*.ts"],
     "exclude": ["node_modules", "dist"]

@@ -117,17 +117,14 @@ class QdrantDatabaseAdapter
     const rows = await this.db.retrieve(this.collectionName, {
       ids: params.id ? [params.id.toString()] : []
     });
+
     const results: RAGKnowledgeItem[] = rows.map((row) => {
-      const contentObj =
-        typeof row.payload?.content === "string"
-          ? JSON.parse(row.payload.content)
-          : row.payload?.content;
       return {
         id: row.id.toString() as UUID,
         agentId: (row.payload?.agentId || "") as UUID,
         content: {
-          text: String(contentObj.text || ""),
-          metadata: contentObj.metadata as { [key: string]: unknown }
+          text: String(row.payload?.description || ""),
+          metadata: row.payload as { [key: string]: unknown }
         },
         embedding: row.vector
           ? Float32Array.from(row.vector as number[])
