@@ -31,7 +31,9 @@ var QdrantDatabaseAdapter = class extends DatabaseAdapter {
   }
   async init() {
     const response = await this.db.getCollections();
-    const collectionNames = response.collections.map((collection) => collection.name);
+    const collectionNames = response.collections.map(
+      (collection) => collection.name
+    );
     if (collectionNames.includes(this.collectionName)) {
       elizaLogger.info("Collection already exists.");
     } else {
@@ -111,18 +113,20 @@ var QdrantDatabaseAdapter = class extends DatabaseAdapter {
       with_vector: true
     });
     const results = rows.map((row) => {
-      var _a, _b, _c, _d;
-      const contentObj = typeof ((_a = row.payload) == null ? void 0 : _a.content) === "string" ? JSON.parse(row.payload.content) : (_b = row.payload) == null ? void 0 : _b.content;
-      elizaLogger.info("Qdrant adapter searchKnowledge  id:", row.id.toString());
+      var _a, _b, _c;
+      elizaLogger.info(
+        "Qdrant adapter searchKnowledge id:",
+        row.id.toString()
+      );
       return {
         id: row.id.toString(),
-        agentId: ((_c = row.payload) == null ? void 0 : _c.agentId) || "",
+        agentId: ((_a = row.payload) == null ? void 0 : _a.agentId) || "",
         content: {
-          text: String(contentObj.text || ""),
-          metadata: contentObj.metadata
+          text: String(((_b = row.payload) == null ? void 0 : _b.description) || ""),
+          metadata: row.payload
         },
         embedding: row.vector ? Float32Array.from(row.vector) : void 0,
-        createdAt: (_d = row.payload) == null ? void 0 : _d.createdAt,
+        createdAt: (_c = row.payload) == null ? void 0 : _c.createdAt,
         similarity: row.score || 0
       };
     });
@@ -282,7 +286,9 @@ var qdrantDatabaseAdapter = {
       );
       return db;
     } else {
-      throw new Error("QDRANT_URL, QDRANT_KEY, QDRANT_PORT, and QDRANT_VECTOR_SIZE are not set");
+      throw new Error(
+        "QDRANT_URL, QDRANT_KEY, QDRANT_PORT, and QDRANT_VECTOR_SIZE are not set"
+      );
     }
   }
 };
