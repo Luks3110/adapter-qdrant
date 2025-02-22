@@ -1,4 +1,5 @@
 import { qdrantDatabaseAdapter } from "./client";
+import { QdrantDatabaseAdapter } from "./client";
 
 const qdrantPlugin = {
   name: "qdrant",
@@ -7,3 +8,5 @@ const qdrantPlugin = {
 };
 
 export default qdrantPlugin;
+
+export { QdrantDatabaseAdapter };

@@ -18,7 +18,7 @@ import {
   type Plugin
 } from "@elizaos/core";
 
-class QdrantDatabaseAdapter
+export class QdrantDatabaseAdapter
   extends DatabaseAdapter<QdrantClient>
   implements IDatabaseCacheAdapter
 {

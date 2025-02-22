@@ -78,17 +78,16 @@ var QdrantDatabaseAdapter = class extends DatabaseAdapter {
       ids: params.id ? [params.id.toString()] : []
     });
     const results = rows.map((row) => {
-      var _a, _b, _c, _d;
-      const contentObj = typeof ((_a = row.payload) == null ? void 0 : _a.content) === "string" ? JSON.parse(row.payload.content) : (_b = row.payload) == null ? void 0 : _b.content;
+      var _a, _b, _c;
       return {
         id: row.id.toString(),
-        agentId: ((_c = row.payload) == null ? void 0 : _c.agentId) || "",
+        agentId: ((_a = row.payload) == null ? void 0 : _a.agentId) || "",
         content: {
-          text: String(contentObj.text || ""),
-          metadata: contentObj.metadata
+          text: String(((_b = row.payload) == null ? void 0 : _b.description) || ""),
+          metadata: row.payload
         },
         embedding: row.vector ? Float32Array.from(row.vector) : void 0,
-        createdAt: (_d = row.payload) == null ? void 0 : _d.createdAt
+        createdAt: (_c = row.payload) == null ? void 0 : _c.createdAt
       };
     });
     return results;
@@ -301,6 +300,7 @@ var qdrantPlugin = {
 };
 var index_default = qdrantPlugin;
 export {
+  QdrantDatabaseAdapter,
   index_default as default
 };
 //# sourceMappingURL=index.js.map
