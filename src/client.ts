@@ -231,6 +231,24 @@ export class QdrantDatabaseAdapter
     return Promise.resolve(undefined);
   }
 
+  private adjustVectorSize(vector: number[], targetSize: number): number[] {
+    if (vector.length === targetSize) return vector;
+
+    if (vector.length > targetSize) {
+      // Truncate if vector is too long
+      elizaLogger.debug(
+        `Truncating vector from ${vector.length} to ${targetSize}`
+      );
+      return vector.slice(0, targetSize);
+    } else {
+      // Pad with zeros if vector is too short
+      elizaLogger.debug(
+        `Padding vector from ${vector.length} to ${targetSize}`
+      );
+      return [...vector, ...new Array(targetSize - vector.length).fill(0)];
+    }
+  }
+
   async createMemory(
     memory: Memory,
     tableName: string,
@@ -256,14 +274,16 @@ export class QdrantDatabaseAdapter
       isUnique = similarMemories.length === 0;
     }
 
+    const vector = memory.embedding
+      ? this.adjustVectorSize(memory.embedding, this.vectorSize)
+      : new Array(this.vectorSize).fill(0);
+
     await this.db.upsert(this.collectionName, {
       wait: true,
       points: [
         {
           id: this.buildQdrantID(memory.id || v4()),
-          vector: memory.embedding
-            ? Array.from(memory.embedding)
-            : new Array(this.vectorSize).fill(0),
+          vector,
           payload: {
             id: memory.id,
             type: tableName,
@@ -519,24 +539,8 @@ export class QdrantDatabaseAdapter
       allNumbers: embedding.every((n) => typeof n === "number")
     });
 
-    // Validate embedding dimension
-    if (embedding.length !== this.vectorSize) {
-      throw new Error(
-        `Invalid embedding dimension: expected ${this.vectorSize}, got ${embedding.length}`
-      );
-    }
-
-    // Clean and normalize the vector
-    const cleanVector = embedding.map((n) => {
-      if (!Number.isFinite(n)) return 0;
-      return Number(n.toFixed(6));
-    });
-
-    elizaLogger.debug("Vector debug:", {
-      originalLength: embedding.length,
-      cleanLength: cleanVector.length,
-      sample: cleanVector.slice(0, 5)
-    });
+    // Adjust vector size to match collection
+    const adjustedVector = this.adjustVectorSize(embedding, this.vectorSize);
 
     // Build filter conditions
     const filter: any = {
@@ -560,7 +564,7 @@ export class QdrantDatabaseAdapter
 
     // Perform the search
     const searchResults = await this.db.search(this.collectionName, {
-      vector: cleanVector,
+      vector: adjustedVector,
       limit: params.count || 10,
       score_threshold: params.match_threshold || 0,
       filter,
