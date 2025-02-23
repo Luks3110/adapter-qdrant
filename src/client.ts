@@ -505,20 +505,35 @@ export class QdrantDatabaseAdapter
     match_count: number;
     unique: boolean;
   }): Promise<Memory[]> {
+    const conditions = {
+      must: [
+        {
+          key: "type",
+          match: { value: params.tableName }
+        },
+        {
+          key: "roomId",
+          match: { value: params.roomId }
+        },
+        {
+          key: "agentId",
+          match: { value: params.agentId }
+        }
+      ]
+    };
+
+    if (params.unique) {
+      conditions.must.push({
+        key: "unique",
+        match: { value: params.unique.toString() }
+      });
+    }
+
     const searchResults = await this.db.search(this.collectionName, {
       vector: Array.from(params.embedding),
       limit: params.match_count,
       score_threshold: params.match_threshold,
-      filter: {
-        must: [
-          { key: "type", match: { value: params.tableName } },
-          { key: "roomId", match: { value: params.roomId } },
-          { key: "agentId", match: { value: params.agentId } },
-          ...(params.unique
-            ? [{ key: "unique", match: { value: params.unique.toString() } }]
-            : [])
-        ]
-      },
+      filter: conditions,
       with_payload: true,
       with_vector: true
     });
@@ -559,23 +574,34 @@ export class QdrantDatabaseAdapter
     const adjustedVector = this.adjustVectorSize(embedding, this.vectorSize);
 
     // Build filter conditions
-    const filter: any = {
-      must: [{ key: "type", match: { value: params.tableName } }]
+    const conditions = {
+      must: [
+        {
+          key: "type",
+          match: { value: params.tableName }
+        }
+      ]
     };
 
     if (params.unique) {
-      filter.must.push({
+      conditions.must.push({
         key: "unique",
         match: { value: params.unique.toString() }
       });
     }
 
     if (params.agentId) {
-      filter.must.push({ key: "agentId", match: { value: params.agentId } });
+      conditions.must.push({
+        key: "agentId",
+        match: { value: params.agentId }
+      });
     }
 
     if (params.roomId) {
-      filter.must.push({ key: "roomId", match: { value: params.roomId } });
+      conditions.must.push({
+        key: "roomId",
+        match: { value: params.roomId }
+      });
     }
 
     // Perform the search
@@ -583,7 +609,7 @@ export class QdrantDatabaseAdapter
       vector: adjustedVector,
       limit: params.count || 10,
       score_threshold: params.match_threshold || 0,
-      filter,
+      filter: conditions,
       with_payload: true,
       with_vector: true
     });
