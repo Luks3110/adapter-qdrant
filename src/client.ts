@@ -352,34 +352,50 @@ export class QdrantDatabaseAdapter
     if (!params.tableName) throw new Error("tableName is required");
     if (!params.roomId) throw new Error("roomId is required");
 
-    const filter: any = {
-      must: [
-        { key: "type", match: { value: params.tableName } },
-        { key: "roomId", match: { value: params.roomId } }
-      ]
-    };
+    const conditions = [
+      {
+        must: [
+          {
+            key: "type",
+            match: { value: params.tableName }
+          },
+          {
+            key: "roomId",
+            match: { value: params.roomId }
+          }
+        ]
+      }
+    ];
 
     if (params.unique) {
-      filter.must.push({
+      conditions[0].must.push({
         key: "unique",
         match: { value: params.unique.toString() }
       });
     }
 
     if (params.agentId) {
-      filter.must.push({ key: "agentId", match: { value: params.agentId } });
+      conditions[0].must.push({
+        key: "agentId",
+        match: { value: params.agentId }
+      });
     }
 
     if (params.start || params.end) {
-      const range: any = { key: "createdAt" };
-      if (params.start) range.gte = params.start;
-      if (params.end) range.lte = params.end;
-      filter.must.push({ range });
+      const rangeCondition: any = {
+        key: "createdAt",
+        range: {}
+      };
+
+      if (params.start) rangeCondition.range.gte = params.start;
+      if (params.end) rangeCondition.range.lte = params.end;
+
+      conditions[0].must.push(rangeCondition);
     }
 
     const scrollResults = await this.db.scroll(this.collectionName, {
       limit: params.count || 100,
-      filter,
+      filter: conditions[0],
       with_payload: true,
       with_vector: true
     });
